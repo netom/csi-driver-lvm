@@ -9,12 +9,11 @@ import (
 )
 
 const (
-	flagLVName         = "lvname"
-	flagLVSize         = "lvsize"
-	flagVGName         = "vgname"
-	flagDevicesPattern = "devices"
-	flagLVMType        = "lvmtype"
-	flagIntegrity      = "integrity"
+	flagLVName    = "lvname"
+	flagLVSize    = "lvsize"
+	flagVGName    = "vgname"
+	flagLVMType   = "lvmtype"
+	flagIntegrity = "integrity"
 )
 
 func cmdNotFound(c *cli.Context, command string) {

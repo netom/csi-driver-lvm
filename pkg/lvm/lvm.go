@@ -48,7 +48,6 @@ type Lvm struct {
 	hostWritePath     string
 	ephemeral         bool
 	maxVolumesPerNode int64
-	devicesPattern    string
 	vgName            string
 	provisionerImage  string
 	pullPolicy        v1.PullPolicy
@@ -71,7 +70,6 @@ type volumeAction struct {
 	nodeName         string
 	size             int64
 	lvmType          string
-	devicesPattern   string
 	provisionerImage string
 	pullPolicy       v1.PullPolicy
 	kubeClient       kubernetes.Clientset
@@ -96,7 +94,7 @@ var (
 )
 
 // NewLvmDriver creates the driver
-func NewLvmDriver(driverName, nodeID, endpoint string, hostWritePath string, ephemeral bool, maxVolumesPerNode int64, version string, devicesPattern string, vgName string, namespace string, provisionerImage string, pullPolicy string) (*Lvm, error) {
+func NewLvmDriver(driverName, nodeID, endpoint string, hostWritePath string, ephemeral bool, maxVolumesPerNode int64, version string, vgName string, namespace string, provisionerImage string, pullPolicy string) (*Lvm, error) {
 	if driverName == "" {
 		return nil, fmt.Errorf("no driver name provided")
 	}
@@ -129,7 +127,6 @@ func NewLvmDriver(driverName, nodeID, endpoint string, hostWritePath string, eph
 		hostWritePath:     hostWritePath,
 		ephemeral:         ephemeral,
 		maxVolumesPerNode: maxVolumesPerNode,
-		devicesPattern:    devicesPattern,
 		vgName:            vgName,
 		namespace:         namespace,
 		provisionerImage:  provisionerImage,
@@ -142,8 +139,8 @@ func (lvm *Lvm) Run() error {
 	var err error
 	// Create GRPC servers
 	lvm.ids = newIdentityServer(lvm.name, lvm.version)
-	lvm.ns = newNodeServer(lvm.nodeID, lvm.ephemeral, lvm.maxVolumesPerNode, lvm.devicesPattern, lvm.vgName)
-	lvm.cs, err = newControllerServer(lvm.ephemeral, lvm.nodeID, lvm.devicesPattern, lvm.vgName, lvm.hostWritePath, lvm.namespace, lvm.provisionerImage, lvm.pullPolicy)
+	lvm.ns = newNodeServer(lvm.nodeID, lvm.ephemeral, lvm.maxVolumesPerNode, lvm.vgName)
+	lvm.cs, err = newControllerServer(lvm.ephemeral, lvm.nodeID, lvm.vgName, lvm.hostWritePath, lvm.namespace, lvm.provisionerImage, lvm.pullPolicy)
 	if err != nil {
 		return err
 	}
@@ -264,7 +261,7 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 
 	args := []string{}
 	if va.action == actionTypeCreate {
-		args = append(args, "createlv", "--lvsize", fmt.Sprintf("%d", va.size), "--devices", va.devicesPattern, "--lvmtype", va.lvmType)
+		args = append(args, "createlv", "--lvsize", fmt.Sprintf("%d", va.size), "--lvmtype", va.lvmType)
 		if va.integrity {
 			args = append(args, "--integrity")
 		}
@@ -448,71 +445,6 @@ func vgExists(vgname string) bool {
 	return vgname == strings.TrimSpace(string(out))
 }
 
-// VgActivate execute vgchange -ay to activate all volumes of the volume group
-func vgActivate() {
-	// scan for vgs and activate if any
-	cmd := exec.Command("vgscan")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		klog.Infof("unable to scan for volumegroups:%s %v", out, err)
-	}
-	cmd = exec.Command("vgchange", "-ay")
-	_, err = cmd.CombinedOutput()
-	if err != nil {
-		klog.Infof("unable to activate volumegroups:%s %v", out, err)
-	}
-}
-
-func devices(devicesPattern []string) (devices []string, err error) {
-	for _, devicePattern := range devicesPattern {
-		klog.Infof("search devices: %s ", devicePattern)
-		matches, err := filepath.Glob(strings.TrimSpace(devicePattern))
-		if err != nil {
-			return nil, err
-		}
-		klog.Infof("found: %s", matches)
-		devices = append(devices, matches...)
-	}
-	return devices, nil
-}
-
-// CreateVG creates a volume group matching the given device patterns
-func CreateVG(name string, devicesPattern string) (string, error) {
-	dp := strings.Split(devicesPattern, ",")
-	if len(dp) == 0 {
-		return name, fmt.Errorf("invalid empty flag %v", dp)
-	}
-
-	vgexists := vgExists(name)
-	if vgexists {
-		klog.Infof("volumegroup: %s already exists\n", name)
-		return name, nil
-	}
-	vgActivate()
-	// now check again for existing vg again
-	vgexists = vgExists(name)
-	if vgexists {
-		klog.Infof("volumegroup: %s already exists\n", name)
-		return name, nil
-	}
-
-	physicalVolumes, err := devices(dp)
-	if err != nil {
-		return "", fmt.Errorf("unable to lookup devices from devicesPattern %s, err:%w", devicesPattern, err)
-	}
-	tags := []string{"vg.metal-stack.io/csi-lvm-driver"}
-
-	args := []string{"-v", name}
-	args = append(args, physicalVolumes...)
-	for _, tag := range tags {
-		args = append(args, "--addtag", tag)
-	}
-	klog.Infof("create vg with command: vgcreate %v", args)
-	cmd := exec.Command("vgcreate", args...)
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
-
 // CreateLVS creates the new volume
 // used by lvcreate provisioner pod and by nodeserver for ephemeral volumes
 func CreateLVS(vg string, name string, size uint64, lvmType string, integrity bool) (string, error) {
@@ -615,6 +547,20 @@ func RemoveLVS(vg string, name string) (string, error) {
 	args = append(args, fmt.Sprintf("%s/%s", vg, name))
 	klog.Infof("lvremove %s", args)
 	cmd := exec.Command("lvremove", args...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func activateLV(lvname, vgName string) (string, error) {
+	lvPath := fmt.Sprintf("/dev/%s/%s", vgName, lvname)
+	cmd := exec.Command("lvchange", "-ay", lvPath)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func deactivateLV(lvname, vgName string) (string, error) {
+	lvPath := fmt.Sprintf("/dev/%s/%s", vgName, lvname)
+	cmd := exec.Command("lvchange", "-an", lvPath)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

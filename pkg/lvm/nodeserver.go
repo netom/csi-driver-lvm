@@ -41,17 +41,15 @@ type nodeServer struct {
 	nodeID            string
 	ephemeral         bool
 	maxVolumesPerNode int64
-	devicesPattern    string
 	vgName            string
 }
 
-func newNodeServer(nodeID string, ephemeral bool, maxVolumesPerNode int64, devicesPattern string, vgName string) *nodeServer {
+func newNodeServer(nodeID string, ephemeral bool, maxVolumesPerNode int64, vgName string) *nodeServer {
 
 	// revive existing volumes at start of node server
 	vgexists := vgExists(vgName)
 	if !vgexists {
 		klog.Infof("volumegroup: %s not found\n", vgName)
-		vgActivate()
 		// now check again for existing vg again
 	}
 	cmd := exec.Command("lvchange", "-ay", vgName)
@@ -64,7 +62,6 @@ func newNodeServer(nodeID string, ephemeral bool, maxVolumesPerNode int64, devic
 		nodeID:            nodeID,
 		ephemeral:         ephemeral,
 		maxVolumesPerNode: maxVolumesPerNode,
-		devicesPattern:    devicesPattern,
 		vgName:            vgName,
 	}
 }
@@ -117,12 +114,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 		volID := req.GetVolumeId()
 
-		output, err := CreateVG(ns.vgName, ns.devicesPattern)
-		if err != nil {
-			return nil, fmt.Errorf("unable to create vg: %w output:%s", err, output)
-		}
-
-		output, err = CreateLVS(ns.vgName, volID, size, req.GetVolumeContext()["type"], false)
+		output, err := CreateLVS(ns.vgName, volID, size, req.GetVolumeContext()["type"], false)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create lv: %w output:%s", err, output)
 		}
@@ -137,7 +129,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, fmt.Errorf("unable to bind mount lv: %w output:%s", err, output)
 		}
 		// FIXME: VolumeCapability is a struct and not the size
-		klog.Infof("block lv %s size:%s vg:%s devices:%s created at:%s", req.GetVolumeId(), req.GetVolumeCapability(), ns.vgName, ns.devicesPattern, targetPath)
+		klog.Infof("block lv %s size:%s vg:%s created at:%s", req.GetVolumeId(), req.GetVolumeCapability(), ns.vgName, targetPath)
 
 	} else if req.GetVolumeCapability().GetMount() != nil {
 
@@ -146,7 +138,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, fmt.Errorf("unable to mount lv: %w output:%s", err, output)
 		}
 		// FIXME: VolumeCapability is a struct and not the size
-		klog.Infof("mounted lv %s size:%s vg:%s devices:%s created at:%s", req.GetVolumeId(), req.GetVolumeCapability(), ns.vgName, ns.devicesPattern, targetPath)
+		klog.Infof("mounted lv %s size:%s vg:%s created at:%s", req.GetVolumeId(), req.GetVolumeCapability(), ns.vgName, targetPath)
 
 	}
 
@@ -197,6 +189,12 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.InvalidArgument, "Volume Capability missing in request")
 	}
 
+	lvname := req.GetVolumeId()
+	out, err := activateLV(lvname, ns.vgName)
+	if err != nil {
+		return nil, fmt.Errorf("unable to activate %s output:%s err:%w", lvname, out, err)
+	}
+
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
@@ -208,6 +206,12 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	}
 	if len(req.GetStagingTargetPath()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
+	}
+
+	lvname := req.GetVolumeId()
+	out, err := deactivateLV(lvname, ns.vgName)
+	if err != nil {
+		return nil, fmt.Errorf("unable to deactivate %s output:%s err:%w", lvname, out, err)
 	}
 
 	return &csi.NodeUnstageVolumeResponse{}, nil
