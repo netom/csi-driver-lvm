@@ -139,11 +139,17 @@ func (lvm *Lvm) Run() error {
 	var err error
 	// Create GRPC servers
 	lvm.ids = newIdentityServer(lvm.name, lvm.version)
-	lvm.ns = newNodeServer(lvm.nodeID, lvm.ephemeral, lvm.maxVolumesPerNode, lvm.vgName)
+
+	lvm.ns, err = newNodeServer(lvm.nodeID, lvm.ephemeral, lvm.maxVolumesPerNode, lvm.vgName)
+	if err != nil {
+		return err
+	}
+
 	lvm.cs, err = newControllerServer(lvm.ephemeral, lvm.nodeID, lvm.vgName, lvm.hostWritePath, lvm.namespace, lvm.provisionerImage, lvm.pullPolicy)
 	if err != nil {
 		return err
 	}
+
 	s := newNonBlockingGRPCServer()
 	s.start(lvm.endpoint, lvm.ids, lvm.cs, lvm.ns)
 	s.wait()
@@ -434,15 +440,22 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 	return nil
 }
 
-// VgExists checks if the given volume group exists
-func vgExists(vgname string) bool {
-	cmd := exec.Command("vgs", vgname, "--noheadings", "-o", "vg_name")
+// Returns the UUID of the volume group if exists
+func vgUUID(vgname string) (string, error) {
+	cmd := exec.Command("vgs", vgname, "--noheadings", "-o", "vg_uuid")
 	out, err := cmd.CombinedOutput()
+
 	if err != nil {
-		klog.Infof("unable to list existing volumegroups:%v", err)
-		return false
+		return "", fmt.Errorf("unable to list existing volumegroups: %w", err)
 	}
-	return vgname == strings.TrimSpace(string(out))
+
+	vgUUID := strings.TrimSpace(string(out))
+
+	if len(vgUUID) != 38 {
+		return "", fmt.Errorf("this doesn't look like an lvm2 UUID: \"%s\" ", vgUUID)
+	}
+
+	return vgUUID, nil
 }
 
 // CreateLVS creates the new volume

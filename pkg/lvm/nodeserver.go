@@ -19,7 +19,6 @@ package lvm
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -35,35 +34,30 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const topologyKeyNode = "topology.lvm.csi/node"
+const topologyKeyNode = "topology.lvm.csi/vguuid"
 
 type nodeServer struct {
 	nodeID            string
+	vgUUID            string
 	ephemeral         bool
 	maxVolumesPerNode int64
 	vgName            string
 }
 
-func newNodeServer(nodeID string, ephemeral bool, maxVolumesPerNode int64, vgName string) *nodeServer {
+func newNodeServer(nodeID string, ephemeral bool, maxVolumesPerNode int64, vgName string) (*nodeServer, error) {
 
-	// revive existing volumes at start of node server
-	vgexists := vgExists(vgName)
-	if !vgexists {
-		klog.Infof("volumegroup: %s not found\n", vgName)
-		// now check again for existing vg again
-	}
-	cmd := exec.Command("lvchange", "-ay", vgName)
-	out, err := cmd.CombinedOutput()
+	vgUUID, err := vgUUID(vgName)
 	if err != nil {
-		klog.Infof("unable to activate logical volumes:%s %v", out, err)
+		return nil, fmt.Errorf("volumegroup: %s UUID could not be determined: %w", vgName, err)
 	}
 
 	return &nodeServer{
 		nodeID:            nodeID,
+		vgUUID:            vgUUID,
 		ephemeral:         ephemeral,
 		maxVolumesPerNode: maxVolumesPerNode,
 		vgName:            vgName,
-	}
+	}, nil
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
@@ -220,7 +214,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 func (ns *nodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 
 	topology := &csi.Topology{
-		Segments: map[string]string{topologyKeyNode: ns.nodeID},
+		Segments: map[string]string{topologyKeyNode: ns.vgUUID},
 	}
 
 	return &csi.NodeGetInfoResponse{
