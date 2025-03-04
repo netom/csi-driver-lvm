@@ -24,11 +24,11 @@ provisioner:
 
 .PHONY: build-plugin
 build-plugin:
-	docker build -t csi-driver-lvm .
+	docker build -t netom/csi-driver-lvm .
 
 .PHONY: build-provisioner
 build-provisioner:
-	docker build -t csi-driver-lvm-provisioner . -f cmd/provisioner/Dockerfile
+	docker build -t netom/csi-driver-lvm-provisioner . -f cmd/provisioner/Dockerfile
 
 /dev/loop%:
 	@fallocate --length 2G loop$*.img

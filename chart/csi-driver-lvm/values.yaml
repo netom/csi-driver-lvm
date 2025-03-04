@@ -14,13 +14,13 @@ rbac:
   pspEnabled: true
 
 pluginImage:
-  repository: ghcr.io/metal-stack/csi-driver-lvm
-  tag: v0.6.0
+  repository: netom/csi-driver-lvm
+  tag: latest
   pullPolicy: IfNotPresent
 
 provisionerImage:
-  repository: ghcr.io/metal-stack/csi-driver-lvm-provisioner
-  tag: v0.6.0
+  repository: netom/csi-driver-lvm-provisioner
+  tag: latest
   pullPolicy: IfNotPresent
 
 sidecarImages:
