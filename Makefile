@@ -25,11 +25,11 @@ provisioner:
 
 .PHONY: build-plugin
 build-plugin:
-	docker build -t netom/csi-driver-lvm:${TAG} .
+	docker build -t netom/csi-driver-lvm:${TAG} . -f Dockerfile.lvmplugin
 
 .PHONY: build-provisioner
 build-provisioner:
-	docker build -t netom/csi-driver-lvm-provisioner:${TAG} . -f cmd/provisioner/Dockerfile
+	docker build -t netom/csi-driver-lvm-provisioner:${TAG} . -f Dockerfile.provisioner
 
 build-images: build-plugin build-provisioner
 

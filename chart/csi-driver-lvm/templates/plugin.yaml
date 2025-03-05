@@ -137,6 +137,7 @@ spec:
         app: csi-driver-lvm-plugin
     spec:
       serviceAccountName: csi-driver-lvm-plugin
+      shareProcessNamespace: true
 {{- if .Values.tolerations.plugin }}
       tolerations:
 {{ toYaml .Values.tolerations.plugin | indent 8 }}
@@ -224,17 +225,17 @@ spec:
           mountPropagation: Bidirectional
         - mountPath: /lib/modules
           name: mod-dir
-        - mountPath: /etc/lvm/backup
-          name: lvmbackup
-          mountPropagation: Bidirectional
-        - mountPath: /etc/lvm/cache
-          name: lvmcache
-          mountPropagation: Bidirectional
-        - mountPath: /etc/lvm/archive
-          name: lvmarchive
+        - mountPath: /etc/lvm
+          name: lvmetc
           mountPropagation: Bidirectional
         - mountPath: /run/lock/lvm
           name: lvmlock
+          mountPropagation: Bidirectional
+        - mountPath: /run/lvm
+          name: lvmrun
+          mountPropagation: Bidirectional
+        - mountPath: /run/lvmlockd.pid
+          name: lvmlockdpid
           mountPropagation: Bidirectional
       - name: liveness-probe
         args:
@@ -280,19 +281,16 @@ spec:
           path: /lib/modules
         name: mod-dir
       - hostPath:
-          path: {{ .Values.lvm.hostWritePath }}/backup
+          path: {{ .Values.lvm.hostWritePath }}
           type: DirectoryOrCreate
-        name: lvmbackup
+        name: lvmetc
       - hostPath:
-          path: {{ .Values.lvm.hostWritePath }}/cache
-          type: DirectoryOrCreate
-        name: lvmcache
-      - hostPath:
-          path: {{ .Values.lvm.hostWritePath }}/archive
-          type: DirectoryOrCreate
-        name: lvmarchive
-      - hostPath:
-          path: {{ .Values.lvm.hostWritePath }}/lock
-          type: DirectoryOrCreate
+          path: /run/lock/lvm
         name: lvmlock
+      - hostPath:
+          path: /run/lvm
+        name: lvmrun
+      - hostPath:
+          path: /run/lvmlockd.pid
+        name: lvmlockdpid
 ---
