@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -67,7 +66,7 @@ type actionType string
 type volumeAction struct {
 	action           actionType
 	name             string
-	nodeName         string
+	vgUUID           string
 	size             int64
 	lvmType          string
 	provisionerImage string
@@ -259,8 +258,8 @@ func umountLV(targetPath string) {
 }
 
 func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
-	if va.name == "" || va.nodeName == "" {
-		return fmt.Errorf("invalid empty name or path or node")
+	if va.name == "" || va.vgUUID == "" {
+		return fmt.Errorf("invalid empty name or path or VG UUID")
 	}
 	if va.action == actionTypeCreate && va.lvmType == "" {
 		return fmt.Errorf("createlv without lvm type")
@@ -281,6 +280,7 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 	klog.Infof("start provisionerPod with args:%s", args)
 	hostPathType := v1.HostPathDirectoryOrCreate
 	privileged := true
+	shareProcessNamespace := true
 	mountPropagationBidirectional := v1.MountPropagationBidirectional
 	provisionerPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -288,12 +288,15 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 		},
 		Spec: v1.PodSpec{
 			RestartPolicy: v1.RestartPolicyNever,
-			NodeName:      va.nodeName,
+			NodeSelector: map[string]string{
+				topologyKeyNode: va.vgUUID,
+			},
 			Tolerations: []v1.Toleration{
 				{
 					Operator: v1.TolerationOpExists,
 				},
 			},
+			ShareProcessNamespace: &shareProcessNamespace,
 			Containers: []v1.Container{
 				{
 					Name:    "csi-lvmplugin-" + string(va.action),
@@ -308,26 +311,20 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 							MountPropagation: &mountPropagationBidirectional,
 						},
 						{
+							Name:             "run",
+							ReadOnly:         false,
+							MountPath:        "/run",
+							MountPropagation: &mountPropagationBidirectional,
+						},
+						{
 							Name:      "modules",
 							ReadOnly:  false,
 							MountPath: "/lib/modules",
 						},
 						{
-							Name:             "lvmbackup",
+							Name:             "lvmetc",
 							ReadOnly:         false,
-							MountPath:        "/etc/lvm/backup",
-							MountPropagation: &mountPropagationBidirectional,
-						},
-						{
-							Name:             "lvmcache",
-							ReadOnly:         false,
-							MountPath:        "/etc/lvm/cache",
-							MountPropagation: &mountPropagationBidirectional,
-						},
-						{
-							Name:             "lvmlock",
-							ReadOnly:         false,
-							MountPath:        "/run/lock/lvm",
+							MountPath:        "/etc/lvm",
 							MountPropagation: &mountPropagationBidirectional,
 						},
 					},
@@ -359,6 +356,15 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 					},
 				},
 				{
+					Name: "run",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{
+							Path: "/run",
+							Type: &hostPathType,
+						},
+					},
+				},
+				{
 					Name: "modules",
 					VolumeSource: v1.VolumeSource{
 						HostPath: &v1.HostPathVolumeSource{
@@ -368,28 +374,10 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 					},
 				},
 				{
-					Name: "lvmbackup",
+					Name: "lvmetc",
 					VolumeSource: v1.VolumeSource{
 						HostPath: &v1.HostPathVolumeSource{
-							Path: filepath.Join(va.hostWritePath, "backup"),
-							Type: &hostPathType,
-						},
-					},
-				},
-				{
-					Name: "lvmcache",
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: filepath.Join(va.hostWritePath, "cache"),
-							Type: &hostPathType,
-						},
-					},
-				},
-				{
-					Name: "lvmlock",
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: filepath.Join(va.hostWritePath, "lock"),
+							Path: va.hostWritePath,
 							Type: &hostPathType,
 						},
 					},
@@ -437,7 +425,7 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 		return fmt.Errorf("create process timeout after %v seconds", retrySeconds)
 	}
 
-	klog.Infof("Volume %v has been %vd on %v", va.name, va.action, va.nodeName)
+	klog.Infof("Volume %v has been %vd on %v", va.name, va.action, va.vgUUID)
 	return nil
 }
 

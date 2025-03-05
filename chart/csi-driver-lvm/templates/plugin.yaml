@@ -223,19 +223,13 @@ spec:
         - mountPath: /dev
           name: dev-dir
           mountPropagation: Bidirectional
+        - mountPath: /run
+          name: run
+          mountPropagation: Bidirectional
         - mountPath: /lib/modules
           name: mod-dir
         - mountPath: /etc/lvm
           name: lvmetc
-          mountPropagation: Bidirectional
-        - mountPath: /run/lock/lvm
-          name: lvmlock
-          mountPropagation: Bidirectional
-        - mountPath: /run/lvm
-          name: lvmrun
-          mountPropagation: Bidirectional
-        - mountPath: /run/lvmlockd.pid
-          name: lvmlockdpid
           mountPropagation: Bidirectional
       - name: liveness-probe
         args:
@@ -278,19 +272,13 @@ spec:
           type: Directory
         name: dev-dir
       - hostPath:
+          path: /run
+        name: run
+      - hostPath:
           path: /lib/modules
         name: mod-dir
       - hostPath:
           path: {{ .Values.lvm.hostWritePath }}
           type: DirectoryOrCreate
         name: lvmetc
-      - hostPath:
-          path: /run/lock/lvm
-        name: lvmlock
-      - hostPath:
-          path: /run/lvm
-        name: lvmrun
-      - hostPath:
-          path: /run/lvmlockd.pid
-        name: lvmlockdpid
 ---

@@ -24,7 +24,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/api/core/v1"
-	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -117,22 +116,13 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		klog.Warningf("Could not parse 'integrity' request parameter, assuming false: %s", err)
 	}
 
-	volumeContext := req.GetParameters()
-	size := strconv.FormatInt(req.GetCapacityRange().GetRequiredBytes(), 10)
-
-	volumeContext["RequiredBytes"] = size
-
-	// schedulded node of the pod is the first entry in the preferred segment
-	node := req.GetAccessibilityRequirements().GetPreferred()[0].GetSegments()[topologyKeyNode]
-	topology := []*csi.Topology{{
-		Segments: map[string]string{topologyKeyNode: node},
-	}}
-	klog.Infof("creating volume %s on node: %s", req.GetName(), node)
-
+	// scheduled node of the pod is the first entry in the preferred segment
+	vgUUID := req.GetAccessibilityRequirements().GetPreferred()[0].GetSegments()[topologyKeyNode]
+	klog.Infof("creating volume %s on volume group: %s", req.GetName(), vgUUID)
 	va := volumeAction{
 		action:           actionTypeCreate,
 		name:             req.GetName(),
-		nodeName:         node,
+		vgUUID:           vgUUID,
 		size:             req.GetCapacityRange().GetRequiredBytes(),
 		lvmType:          lvmType,
 		pullPolicy:       cs.pullPolicy,
@@ -147,6 +137,15 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		klog.Errorf("error creating provisioner pod :%v", err)
 		return nil, err
 	}
+
+	topology := []*csi.Topology{{
+		Segments: map[string]string{topologyKeyNode: vgUUID},
+	}}
+
+	volumeContext := req.GetParameters()
+	size := strconv.FormatInt(req.GetCapacityRange().GetRequiredBytes(), 10)
+	volumeContext["RequiredBytes"] = size
+	volumeContext["vgUUID"] = vgUUID
 
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
@@ -178,25 +177,14 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	}
 	klog.V(4).Infof("volume %s to be deleted", volume)
 	ns := volume.Spec.NodeAffinity.Required.NodeSelectorTerms
-	node := ns[0].MatchExpressions[0].Values[0]
+	vgUUID := ns[0].MatchExpressions[0].Values[0]
 
-	klog.V(4).Infof("from node %s ", node)
-
-	_, err = cs.kubeClient.CoreV1().Nodes().Get(ctx, node, metav1.GetOptions{})
-	if err != nil {
-		if k8serror.IsNotFound(err) {
-			klog.Infof("node %s not found anymore. Assuming volume %s is gone for good.", node, volID)
-			return &csi.DeleteVolumeResponse{}, nil
-		} else {
-			klog.Errorf("error getting nodes: %v", err)
-			return nil, err
-		}
-	}
+	klog.V(4).Infof("from VG UUID %s ", vgUUID)
 
 	va := volumeAction{
 		action:           actionTypeDelete,
 		name:             req.GetVolumeId(),
-		nodeName:         node,
+		vgUUID:           vgUUID,
 		pullPolicy:       cs.pullPolicy,
 		provisionerImage: cs.provisionerImage,
 		kubeClient:       cs.kubeClient,
