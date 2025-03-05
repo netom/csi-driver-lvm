@@ -167,6 +167,7 @@ func mountLV(lvname, mountPath string, vgName string, fsType string) (string, er
 	// check for already formatted
 	cmd := exec.Command("blkid", lvPath)
 	out, err := cmd.CombinedOutput()
+	klog.Infof("blkid: %s", out)
 	if err != nil {
 		klog.Infof("unable to check if %s is already formatted:%v", lvPath, err)
 	}
@@ -446,7 +447,7 @@ func vgUUID(vgname string) (string, error) {
 	out, err := cmd.CombinedOutput()
 
 	if err != nil {
-		return "", fmt.Errorf("unable to list existing volumegroups: %w", err)
+		return "", fmt.Errorf("unable to list existing volumegroups: %s, error: %w", out, err)
 	}
 
 	vgUUID := strings.TrimSpace(string(out))
@@ -524,7 +525,7 @@ func lvExists(vg string, name string) bool {
 	cmd := exec.Command("lvs", vgname, "--noheadings", "-o", "lv_name")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		klog.Infof("unable to list existing volumes:%v", err)
+		klog.Infof("unable to list existing volumes: %s, error: %v", out, err)
 		return false
 	}
 	return name == strings.TrimSpace(string(out))
@@ -581,6 +582,7 @@ func deactivateLV(lvname, vgName string) (string, error) {
 func pvCount(vgname string) (int, error) {
 	cmd := exec.Command("vgs", vgname, "--noheadings", "-o", "pv_count")
 	out, err := cmd.CombinedOutput()
+	klog.Infof("vgs: %s", out)
 	if err != nil {
 		return 0, err
 	}

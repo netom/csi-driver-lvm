@@ -1,6 +1,7 @@
 GO111MODULE := on
-KUBECONFIG := $(shell pwd)/.kubeconfig
+#KUBECONFIG := $(shell pwd)/.kubeconfig
 HELM_REPO := "https://helm.metal-stack.io"
+TAG := $(shell date +%Y%m%d%H%M%S)
 
 ifeq ($(CI),true)
   DOCKER_TTY_ARG=
@@ -24,11 +25,23 @@ provisioner:
 
 .PHONY: build-plugin
 build-plugin:
-	docker build -t netom/csi-driver-lvm .
+	docker build -t netom/csi-driver-lvm:${TAG} .
 
 .PHONY: build-provisioner
 build-provisioner:
-	docker build -t netom/csi-driver-lvm-provisioner . -f cmd/provisioner/Dockerfile
+	docker build -t netom/csi-driver-lvm-provisioner:${TAG} . -f cmd/provisioner/Dockerfile
+
+build-images: build-plugin build-provisioner
+
+push-images: build-images
+	docker push netom/csi-driver-lvm:${TAG}
+	docker push netom/csi-driver-lvm-provisioner:${TAG}
+
+helm-install: push-images
+	helm -n csi-driver-lvm  upgrade --install --create-namespace \
+		csi-driver-lvm chart/csi-driver-lvm \
+	  --set pluginImage.tag=${TAG} \
+	  --set provisionerImage.tag=${TAG}
 
 /dev/loop%:
 	@fallocate --length 2G loop$*.img
