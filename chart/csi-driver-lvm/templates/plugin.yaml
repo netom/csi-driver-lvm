@@ -138,7 +138,7 @@ spec:
     spec:
       serviceAccountName: csi-driver-lvm-plugin
       hostPID: true
-      hostIPC: true
+      # hostIPC: true
 {{- if .Values.tolerations.plugin }}
       tolerations:
 {{ toYaml .Values.tolerations.plugin | indent 8 }}

@@ -62,6 +62,7 @@ func createLV(c *cli.Context) error {
 	}
 	integrity := c.Bool(flagIntegrity)
 
+	// TODO: handle formatting here
 	output, err := lvm.CreateLVS(vgName, lvName, lvSize, lvmType, integrity)
 	if err != nil {
 		return fmt.Errorf("unable to create lv: %w output:%s", err, output)

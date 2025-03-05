@@ -116,7 +116,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		klog.Warningf("Could not parse 'integrity' request parameter, assuming false: %s", err)
 	}
 
-	// scheduled node of the pod is the first entry in the preferred segment
+	// Get the first preferred node, get the volume group UUID on that node.
 	vgUUID := req.GetAccessibilityRequirements().GetPreferred()[0].GetSegments()[topologyKeyNode]
 	klog.Infof("creating volume %s on volume group: %s", req.GetName(), vgUUID)
 	va := volumeAction{

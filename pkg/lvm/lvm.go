@@ -204,16 +204,21 @@ func mountLV(lvname, mountPath string, vgName string, fsType string) (string, er
 		return string(out), fmt.Errorf("unable to create mount directory for lv:%s err:%w", lvname, err)
 	}
 
+	// Prevent multiple mounts with the same soruce and target
+	cmd = exec.Command("findmnt", "--source", lvPath, "--target", mountPath)
+	_, err = cmd.CombinedOutput()
+	if err == nil {
+		klog.Infof("findmount found mount, source: %s, target: %s", lvPath, mountPath)
+		return "", nil
+	}
+
 	// --make-shared is required that this mount is visible outside this container.
 	mountArgs := []string{"--make-shared", "-t", fsType, lvPath, mountPath}
 	klog.Infof("mountlv command: mount %s", mountArgs)
 	cmd = exec.Command("mount", mountArgs...)
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		mountOutput := string(out)
-		if !strings.Contains(mountOutput, "already mounted") {
-			return string(out), fmt.Errorf("unable to mount %s to %s err:%w output:%s", lvPath, mountPath, err, out)
-		}
+		return string(out), fmt.Errorf("unable to mount %s to %s err:%w output:%s", lvPath, mountPath, err, out)
 	}
 	err = os.Chmod(mountPath, 0777|os.ModeSetgid)
 	if err != nil {
@@ -230,11 +235,19 @@ func bindMountLV(lvname, mountPath string, vgName string) (string, error) {
 		return "", fmt.Errorf("unable to create mount directory for lv:%s err:%w", lvname, err)
 	}
 
+	// Prevent multiple mounts with the same soruce and target
+	cmd := exec.Command("findmnt", "--source", lvPath, "--target", mountPath)
+	_, err = cmd.CombinedOutput()
+	if err == nil {
+		klog.Infof("findmount found mount, source: %s, target: %s", lvPath, mountPath)
+		return "", nil
+	}
+
 	// --make-shared is required that this mount is visible outside this container.
 	// --bind is required for raw block volumes to make them visible inside the pod.
 	mountArgs := []string{"--make-shared", "--bind", lvPath, mountPath}
 	klog.Infof("bindmountlv command: mount %s", mountArgs)
-	cmd := exec.Command("mount", mountArgs...)
+	cmd = exec.Command("mount", mountArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		mountOutput := string(out)
@@ -297,7 +310,7 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 				},
 			},
 			HostPID: true,
-			HostIPC: true,
+			//HostIPC: true,
 			Containers: []v1.Container{
 				{
 					Name:    "csi-lvmplugin-" + string(va.action),

@@ -122,8 +122,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		if err != nil {
 			return nil, fmt.Errorf("unable to bind mount lv: %w output:%s", err, output)
 		}
-		// FIXME: VolumeCapability is a struct and not the size
-		klog.Infof("block lv %s size:%s vg:%s created at:%s", req.GetVolumeId(), req.GetVolumeCapability(), ns.vgName, targetPath)
+		klog.Infof("block lv %s vg:%s created at:%s", req.GetVolumeId(), ns.vgName, targetPath)
 
 	} else if req.GetVolumeCapability().GetMount() != nil {
 
@@ -131,8 +130,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		if err != nil {
 			return nil, fmt.Errorf("unable to mount lv: %w output:%s", err, output)
 		}
-		// FIXME: VolumeCapability is a struct and not the size
-		klog.Infof("mounted lv %s size:%s vg:%s created at:%s", req.GetVolumeId(), req.GetVolumeCapability(), ns.vgName, targetPath)
+		klog.Infof("mounted lv %s vg:%s created at:%s", req.GetVolumeId(), ns.vgName, targetPath)
 
 	}
 
@@ -141,8 +139,6 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 
-	// TODO
-	// implement deletion of ephemeral volumes
 	volID := req.GetVolumeId()
 
 	klog.Infof("NodeUnpublishRequest: %s", req)
