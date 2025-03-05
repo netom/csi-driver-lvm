@@ -17,6 +17,7 @@ limitations under the License.
 package lvm
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -432,13 +433,22 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 // Returns the UUID of the volume group if exists
 func vgUUID(vgname string) (string, error) {
 	cmd := exec.Command("vgs", vgname, "--noheadings", "-o", "vg_uuid")
-	out, err := cmd.CombinedOutput()
+
+	var outb, errb bytes.Buffer
+
+	cmd.Stdout = &outb
+	cmd.Stderr = &errb
+
+	err := cmd.Run()
+
+	stdOut := outb.String()
+	stdErr := errb.String()
 
 	if err != nil {
-		return "", fmt.Errorf("unable to list existing volumegroups: %s, error: %w", out, err)
+		return "", fmt.Errorf("unable to list existing volumegroups: stdout: %s, stderr: %s, error: %w", stdOut, stdErr, err)
 	}
 
-	vgUUID := strings.TrimSpace(string(out))
+	vgUUID := strings.TrimSpace(string(stdOut))
 
 	if len(vgUUID) != 38 {
 		return "", fmt.Errorf("this doesn't look like an lvm2 UUID: \"%s\" ", vgUUID)

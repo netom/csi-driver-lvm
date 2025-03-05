@@ -176,8 +176,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		panic(err.Error())
 	}
 	klog.V(4).Infof("volume %s to be deleted", volume)
-	ns := volume.Spec.NodeAffinity.Required.NodeSelectorTerms
-	vgUUID := ns[0].MatchExpressions[0].Values[0]
+	vgUUID := volume.Spec.CSI.VolumeAttributes["vgUUID"]
 
 	klog.V(4).Infof("from VG UUID %s ", vgUUID)
 
