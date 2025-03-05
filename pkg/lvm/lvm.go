@@ -281,7 +281,6 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 	klog.Infof("start provisionerPod with args:%s", args)
 	hostPathType := v1.HostPathDirectoryOrCreate
 	privileged := true
-	shareProcessNamespace := true
 	mountPropagationBidirectional := v1.MountPropagationBidirectional
 	provisionerPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -297,7 +296,8 @@ func createProvisionerPod(ctx context.Context, va volumeAction) (err error) {
 					Operator: v1.TolerationOpExists,
 				},
 			},
-			ShareProcessNamespace: &shareProcessNamespace,
+			HostPID: true,
+			HostIPC: true,
 			Containers: []v1.Container{
 				{
 					Name:    "csi-lvmplugin-" + string(va.action),

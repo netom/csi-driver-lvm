@@ -61,7 +61,7 @@ metadata:
 spec:
   allowedHostPaths:
   - pathPrefix: /lib/modules
-  - pathPrefix: {{ .Values.lvm.hostWritePath }}/cache
+  - pathPrefix: {{ .Values.lvm.hostWritePath }}
   - pathPrefix: {{ .Values.kubernetes.kubeletPath }}/plugins/{{ .Values.lvm.storageClassStub }}
   - pathPrefix: {{ .Values.lvm.hostWritePath }}/backup
   - pathPrefix: {{ .Values.lvm.hostWritePath }}/lock
@@ -137,7 +137,8 @@ spec:
         app: csi-driver-lvm-plugin
     spec:
       serviceAccountName: csi-driver-lvm-plugin
-      shareProcessNamespace: true
+      hostPID: true
+      hostIPC: true
 {{- if .Values.tolerations.plugin }}
       tolerations:
 {{ toYaml .Values.tolerations.plugin | indent 8 }}

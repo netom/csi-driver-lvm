@@ -8,7 +8,7 @@ FROM alpine:3.21
 LABEL maintainers="Metal Authors"
 LABEL description="LVM Driver"
 
-RUN apk add lvm2 lvm2-extra lvm2-lockd e2fsprogs e2fsprogs-extra smartmontools nvme-cli util-linux device-mapper xfsprogs xfsprogs-extra
+RUN apk add lvm2 lvm2-extra lvm2-lockd e2fsprogs e2fsprogs-extra smartmontools nvme-cli util-linux device-mapper xfsprogs xfsprogs-extra strace
 COPY --from=builder /work/bin/* /
 USER root
 ENTRYPOINT ["/csi-lvmplugin-provisioner"]
